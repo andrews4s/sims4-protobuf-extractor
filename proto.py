@@ -78,6 +78,11 @@ class ProtobinDecompiler:
         pb2.FieldDescriptorProto.LABEL_OPTIONAL: "optional",
         pb2.FieldDescriptorProto.LABEL_REQUIRED: "required",
         pb2.FieldDescriptorProto.LABEL_REPEATED: "repeated"
+    }    
+    extension_label_map = {
+        pb2.FieldDescriptorProto.LABEL_OPTIONAL: "optional",
+        pb2.FieldDescriptorProto.LABEL_REQUIRED: "optional",
+        pb2.FieldDescriptorProto.LABEL_REPEATED: "repeated"
     }
 
     type_map = {
@@ -157,6 +162,8 @@ class ProtobinDecompiler:
         # deserialize fields
         for field in msg.field:
             self.decompile_field(field)
+        if msg.name == 'EnumOptions':
+            self.write('optional bool allow_alias = 2;\n')
 
         if not self.proto3:
             # extension ranges
@@ -177,12 +184,12 @@ class ProtobinDecompiler:
         self.write("extend %s {\n" % extension.extendee)
         self.indent_level += 1
 
-        self.decompile_field(extension)
+        self.decompile_field(extension, True)
 
         self.indent_level -= 1
         self.write("}\n")
 
-    def decompile_field(self, field):
+    def decompile_field(self, field, ext=False):
         # type name is either another message or a standard type
         type_name = ""
         if field.type in (pb2.FieldDescriptorProto.TYPE_MESSAGE, pb2.FieldDescriptorProto.TYPE_ENUM):
@@ -191,7 +198,7 @@ class ProtobinDecompiler:
             type_name = self.type_map[field.type]
 
         # build basic field string with label name
-        field_str = "%s %s %s = %d" % (self.label_map[field.label], type_name, field.name, field.number)
+        field_str = "%s %s %s = %d" % ( (self.extension_label_map if ext else  self.label_map)[field.label], type_name, field.name, field.number)
 
         # add default value if set
         if not self.proto3 and field.HasField("default_value"):
@@ -207,13 +214,13 @@ class ProtobinDecompiler:
         self.write("enum %s {\n" % enum.name)
         self.indent_level += 1
 
+        all_vals = []
+        for value in enum.value:
+            if value.number in all_vals:
+                self.write("option allow_alias = true;\n")
+                break
+            all_vals.append(value.number)
         if self.proto3:
-            all_vals = []
-            for value in enum.value:
-                if value.number in all_vals:
-                    self.write("option allow_alias = true;\n")
-                    break
-                all_vals.append(value.number)
             first_val = all_vals[0]
             if first_val != 0:
                 prefixes=enum.value[0].name.split('_')
