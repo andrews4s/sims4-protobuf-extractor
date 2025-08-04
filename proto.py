@@ -207,6 +207,10 @@ class ProtobinDecompiler:
             if field.type == pb2.FieldDescriptorProto.TYPE_STRING:
                 def_val = "\"%s\"" % def_val
             field_str += " [default = %s]" % def_val
+        if field.HasField("options"):
+            if field.options.packed:
+                field_str += " [packed = true]"
+
         field_str += ";\n"
         self.write(field_str)
 
